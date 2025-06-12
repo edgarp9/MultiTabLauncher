@@ -11,7 +11,7 @@ A lightweight application launcher that organizes programs into customizable tab
 - **Customizable button configuration** - Set program path, display name, and administrator privileges for each button
 - **Flexible tab management** - Adjust the number of tabs to organize your applications
 - **Configurable grid layout** - Control the number of rows and columns of buttons per tab
-- **Ultra-lightweight** - Application size is less than 300KB
+- **Ultra-lightweight** - Application size is less than 300KB (statically linked)
 
 ## Configuration
 
