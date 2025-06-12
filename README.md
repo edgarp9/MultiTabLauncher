@@ -2,6 +2,9 @@
 
 A lightweight application launcher that organizes programs into customizable tabs with configurable button layouts.
 
+![mtl](https://github.com/user-attachments/assets/deb2ead7-618a-44c9-a5ac-c58080208a50)
+
+
 ## Features
 
 - **One-click program execution** - Launch applications instantly with a single button click
@@ -14,6 +17,9 @@ A lightweight application launcher that organizes programs into customizable tab
 
 ### Quick Setup
 Right-click on any button to configure its settings through the context menu.
+
+![mtledit](https://github.com/user-attachments/assets/306169fe-7ee2-45be-aa3c-fa438107eb2a)
+
 
 ### Advanced Configuration
 For detailed customization, edit the `MultiTabLauncher.ini` file located in the same folder as `MultiTabLauncher.exe` using any text editor.
