@@ -753,7 +753,7 @@ std::wstring ExpandEnvVars(const std::wstring& str) {
 }
 
 bool SaveFileAsUTF16LE(const wchar_t* filename, const std::wstring& text) {
-    std::ofstream file(filename, std::ios::binary); // ¹Ýµå½Ã binary
+    std::ofstream file(filename, std::ios::binary);
     if (!file.is_open())
         return false;
 
