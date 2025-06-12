@@ -37,6 +37,9 @@ Tab1=System
 - `ButtonCols` - Number of button columns per tab  
 - `Tab0`, `Tab1`, etc. - Names for each tab
 
+### Auto-Configuration
+If `MultiTabLauncher.ini` doesn't exist when launching the program, it will be automatically created with default settings.
+
 ## Development Environment
 
 - **IDE**: Visual Studio 2022
