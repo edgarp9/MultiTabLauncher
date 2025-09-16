@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 #include <cwctype>
+#include <chrono>
+#include <thread>
+
 #include "resource.h"
 
 #pragma comment(lib, "comctl32.lib")
@@ -40,12 +43,16 @@ HWND g_hTabControl = NULL;
 // --- Data Structures ---
 struct ButtonInfo
 {
+    enum class ActionType { Launch, SendKeys };
+
     HWND hButton{ NULL };
     std::wstring name{ L"" };
     std::wstring path{ L"" };
     std::wstring parameters{ L"" };
     bool adminMode{ false };
+    bool autoEnter{ false };
     HICON hIcon{ NULL };
+    ActionType type{ ActionType::Launch };
 };
 std::vector<std::vector<ButtonInfo>> g_tabButtonData;
 std::vector<std::wstring> g_tabNames;
@@ -91,6 +98,7 @@ bool WriteUtf16LeFile(const wchar_t* filename, const std::wstring& text);
 // --- Core Application Logic ---
 bool LaunchApplication(const std::wstring& filePath, const std::wstring& parameters, bool asAdmin);
 void OnLaunchButtonClick(int tabIndex, int buttonIndex);
+bool SendTextToWindow(const std::wstring& command, bool isAutoEnter);
 int DisplayButtonSettingsDialog(int tabIdx, int btnIdx);
 
 // --- Utility Functions ---
@@ -264,8 +272,12 @@ LRESULT CALLBACK MainWindowProcedure(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         SetWindowTextW(info.hButton, info.name.c_str());
 
                         HICON hOldIcon = info.hIcon;
-                        info.hIcon = info.path.empty() ? NULL : ExtractIconFromFile(info.path);
-
+                        if (info.type == ButtonInfo::ActionType::Launch) {
+                            info.hIcon = info.path.empty() ? NULL : ExtractIconFromFile(info.path);
+                        }
+                        else {
+                            info.hIcon = NULL;
+                        }
                         if (hOldIcon && hOldIcon != g_hDefaultIcon)
                         {
                             DestroyIcon(hOldIcon);
@@ -630,8 +642,18 @@ void LoadConfigurationFromFile()
             trim(info.parameters);
 
             info.adminMode = GetPrivateProfileInt(section.c_str(), (keyBase + L"_Admin").c_str(), 0, g_configFilePath.c_str()) != 0;
+            
+            info.autoEnter = GetPrivateProfileInt(section.c_str(), (keyBase + L"_AutoEnter").c_str(), 0, g_configFilePath.c_str()) != 0;
 
-            info.hIcon = info.path.empty() ? NULL : ExtractIconFromFile(info.path);
+            int action = GetPrivateProfileInt(section.c_str(), (keyBase + L"_Action").c_str(), 0, g_configFilePath.c_str());
+            info.type = (action == 1) ? ButtonInfo::ActionType::SendKeys : ButtonInfo::ActionType::Launch;
+
+            if (info.type == ButtonInfo::ActionType::Launch) {
+                info.hIcon = info.path.empty() ? NULL : ExtractIconFromFile(info.path);
+            }
+            else {
+                info.hIcon = NULL;
+            }
         }
     }
 }
@@ -653,7 +675,12 @@ bool SaveButtonConfigurationToFile(int tabIndex, int buttonIndex, const ButtonIn
     ok &= WritePrivateProfileStringW(section.c_str(), (btnKey + L"_Path").c_str(), info.path.c_str(), g_configFilePath.c_str());
     ok &= WritePrivateProfileStringW(section.c_str(), (btnKey + L"_Params").c_str(), info.parameters.c_str(), g_configFilePath.c_str());
     ok &= WritePrivateProfileStringW(section.c_str(), (btnKey + L"_Admin").c_str(), info.adminMode ? L"1" : L"0", g_configFilePath.c_str());
-
+    
+    std::wstring action = (info.type == ButtonInfo::ActionType::SendKeys) ? L"1" : L"0";
+    ok &= WritePrivateProfileStringW(section.c_str(), (btnKey + L"_Action").c_str(), action.c_str(), g_configFilePath.c_str());
+    
+    ok &= WritePrivateProfileStringW(section.c_str(), (btnKey + L"_AutoEnter").c_str(), info.autoEnter ? L"1" : L"0", g_configFilePath.c_str());
+    
     return ok != 0;
 }
 
@@ -775,13 +802,87 @@ bool LaunchApplication(const std::wstring& filePath, const std::wstring& paramet
 void OnLaunchButtonClick(int tabIndex, int buttonIndex)
 {
     const ButtonInfo& buttonInfo = g_tabButtonData[tabIndex][buttonIndex];
-    if (!buttonInfo.path.empty())
+
+    if (buttonInfo.type == ButtonInfo::ActionType::SendKeys)
     {
-        LaunchApplication(buttonInfo.path, buttonInfo.parameters, buttonInfo.adminMode);
-        // Reset current directory in case the launched process changed it
-        SetCurrentDirectoryW(g_executableDirectory.c_str());
+        if (!buttonInfo.parameters.empty())
+        {
+            SendTextToWindow(buttonInfo.parameters, buttonInfo.autoEnter);
+        }
+    }
+    else // Default is Launch
+    {
+        if (!buttonInfo.path.empty())
+        {
+            LaunchApplication(buttonInfo.path, buttonInfo.parameters, buttonInfo.adminMode);
+            SetCurrentDirectoryW(g_executableDirectory.c_str());
+        }
     }
 }
+
+bool SendTextToWindow(const std::wstring& command, bool isAutoEnter)
+{
+    HWND hTarget = nullptr;
+    HWND hWnd = GetTopWindow(nullptr);
+    while (hWnd != nullptr) {
+        if (hWnd != g_hMainWindow && IsWindowVisible(hWnd) && GetWindowTextLength(hWnd) > 0) {
+            hTarget = hWnd;
+            break;
+        }
+        hWnd = GetNextWindow(hWnd, GW_HWNDNEXT);
+    }
+
+    if (hTarget == nullptr) {
+        return false;
+    }
+
+    SetForegroundWindow(hTarget);
+    BringWindowToTop(hTarget);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
+
+    std::vector<INPUT> inputs;
+    inputs.reserve(command.length() * 2 + (isAutoEnter ? 2 : 0)); 
+
+    for (wchar_t wch : command) {
+        // Key Down
+        INPUT input_down{};
+        input_down.type = INPUT_KEYBOARD;
+        input_down.ki.wScan = wch;
+        input_down.ki.dwFlags = KEYEVENTF_UNICODE;
+        inputs.push_back(input_down);
+
+        // Key Up
+        INPUT input_up{};
+        input_up.type = INPUT_KEYBOARD;
+        input_up.ki.wScan = wch;
+        input_up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+        inputs.push_back(input_up);
+    }
+
+    if (isAutoEnter) {
+        // Key Down
+        INPUT enter_down{};
+        enter_down.type = INPUT_KEYBOARD;
+        enter_down.ki.wVk = VK_RETURN;
+        inputs.push_back(enter_down);
+
+        // Key Up
+        INPUT enter_up{};
+        enter_up.type = INPUT_KEYBOARD;
+        enter_up.ki.wVk = VK_RETURN;
+        enter_up.ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs.push_back(enter_up);
+    }
+
+    if (!inputs.empty()) {
+        const UINT sent_count = SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+        return sent_count == inputs.size();
+    }
+
+    return true; 
+}
+
 
 // =============================================================
 //                     Utility Functions
@@ -920,6 +1021,24 @@ inline void trim(std::wstring& s)
 //               Button Settings Dialog and Helpers
 // =============================================================
 
+void UpdateDialogControls(HWND hDlg)
+{
+    BOOL isLaunch = (IsDlgButtonChecked(hDlg, IDC_RADIO_LAUNCH) == BST_CHECKED);
+
+    // 'Launch Program' 관련 컨트롤들
+    ShowWindow(GetDlgItem(hDlg, IDC_LBL_PATH), isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_EDIT_PATH), isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_BUTTON_BROWSE), isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_LBL_PARAMS), isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_EDIT_PARAMS), isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_CHECK_ADMIN), isLaunch ? SW_SHOW : SW_HIDE);
+
+    // 'Send Keystrokes' 관련 컨트롤들
+    ShowWindow(GetDlgItem(hDlg, IDC_LBL_COMMAND), !isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_EDIT_COMMAND), !isLaunch ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hDlg, IDC_CHECK_AUTOENTER), !isLaunch ? SW_SHOW : SW_HIDE);
+}
+
 /**
  * @brief Displays the modal dialog to edit button information.
  * @param tabIdx The tab index of the button.
@@ -949,15 +1068,27 @@ INT_PTR CALLBACK ButtonSettingsDialogProcedure(HWND hDlg, UINT message, WPARAM w
         if (pInfo)
         {
             SetDlgItemTextW(hDlg, IDC_EDIT_NAME, pInfo->name.c_str());
-            SetDlgItemTextW(hDlg, IDC_EDIT_PATH, pInfo->path.c_str());
-            SetDlgItemTextW(hDlg, IDC_EDIT_PARAMS, pInfo->parameters.c_str());
-            CheckDlgButton(hDlg, IDC_CHECK_ADMIN, pInfo->adminMode ? BST_CHECKED : BST_UNCHECKED);
+            if (pInfo->type == ButtonInfo::ActionType::SendKeys)
+            {
+                CheckDlgButton(hDlg, IDC_RADIO_SENDKEYS, BST_CHECKED);
+                SetDlgItemTextW(hDlg, IDC_EDIT_COMMAND, pInfo->parameters.c_str());
+                CheckDlgButton(hDlg, IDC_CHECK_AUTOENTER, pInfo->autoEnter ? BST_CHECKED : BST_UNCHECKED);
+            }
+            else // Default to Launch
+            {
+                CheckDlgButton(hDlg, IDC_RADIO_LAUNCH, BST_CHECKED);
+                SetDlgItemTextW(hDlg, IDC_EDIT_PATH, pInfo->path.c_str());
+                SetDlgItemTextW(hDlg, IDC_EDIT_PARAMS, pInfo->parameters.c_str());
+                CheckDlgButton(hDlg, IDC_CHECK_ADMIN, pInfo->adminMode ? BST_CHECKED : BST_UNCHECKED);
+            }
+            UpdateDialogControls(hDlg);
         }
 
         // Subclass edit controls to handle Ctrl+A for selecting all text
         SetWindowSubclass(GetDlgItem(hDlg, IDC_EDIT_NAME), SelectAllEditSubclassProcedure, 1, 0);
         SetWindowSubclass(GetDlgItem(hDlg, IDC_EDIT_PATH), SelectAllEditSubclassProcedure, 1, 0);
         SetWindowSubclass(GetDlgItem(hDlg, IDC_EDIT_PARAMS), SelectAllEditSubclassProcedure, 1, 0);
+        SetWindowSubclass(GetDlgItem(hDlg, IDC_EDIT_COMMAND), SelectAllEditSubclassProcedure, 1, 0);
         return TRUE;
     }
 
@@ -965,6 +1096,12 @@ INT_PTR CALLBACK ButtonSettingsDialogProcedure(HWND hDlg, UINT message, WPARAM w
     {
         switch (LOWORD(wParam))
         {
+        case IDC_RADIO_LAUNCH:
+        case IDC_RADIO_SENDKEYS:
+        {
+            UpdateDialogControls(hDlg);
+            break;
+        }
         case IDC_BUTTON_BROWSE:
         {
             // Open a file dialog to browse for an executable
@@ -993,11 +1130,28 @@ INT_PTR CALLBACK ButtonSettingsDialogProcedure(HWND hDlg, UINT message, WPARAM w
             {
                 pInfo->name = GetTextFromDialogControl(hDlg, IDC_EDIT_NAME);
                 trim(pInfo->name);
-                pInfo->path = GetTextFromDialogControl(hDlg, IDC_EDIT_PATH);
-                trim(pInfo->path);
-                pInfo->parameters = GetTextFromDialogControl(hDlg, IDC_EDIT_PARAMS);
-                trim(pInfo->parameters);
-                pInfo->adminMode = (IsDlgButtonChecked(hDlg, IDC_CHECK_ADMIN) == BST_CHECKED);
+
+                if (IsDlgButtonChecked(hDlg, IDC_RADIO_SENDKEYS) == BST_CHECKED)
+                {
+                    pInfo->type = ButtonInfo::ActionType::SendKeys;
+                    pInfo->parameters = GetTextFromDialogControl(hDlg, IDC_EDIT_COMMAND);
+                    trim(pInfo->parameters);
+                    pInfo->autoEnter = (IsDlgButtonChecked(hDlg, IDC_CHECK_AUTOENTER) == BST_CHECKED);
+
+                    // Clear launch-related fields
+                    pInfo->path.clear();
+                    pInfo->adminMode = false;
+                }
+                else
+                {
+                    pInfo->type = ButtonInfo::ActionType::Launch;
+                    pInfo->path = GetTextFromDialogControl(hDlg, IDC_EDIT_PATH);
+                    trim(pInfo->path);
+                    pInfo->parameters = GetTextFromDialogControl(hDlg, IDC_EDIT_PARAMS);
+                    trim(pInfo->parameters);
+                    pInfo->adminMode = (IsDlgButtonChecked(hDlg, IDC_CHECK_ADMIN) == BST_CHECKED);
+                    pInfo->autoEnter = false;
+                }
             }
             EndDialog(hDlg, IDOK);
             break;
@@ -1064,7 +1218,7 @@ ButtonCols=8
 Tab0=Home
 Tab1=System
 Tab2=Dev
-Tab3=Tab4
+Tab3=Debian
 Tab4=Tab5
 Tab5=Tab6
 Tab6=Tab7
@@ -1077,105 +1231,182 @@ Button0_Name=Explorer
 Button0_Path=explorer.exe
 Button0_Params=
 Button0_Admin=0
+Button0_Action=0
+Button0_AutoEnter=0
 Button1_Name=Notepad
 Button1_Path=notepad.exe
 Button1_Params=
 Button1_Admin=0
+Button1_Action=0
+Button1_AutoEnter=0
 Button2_Name=Snipping Tool
 Button2_Path=snippingtool.exe
 Button2_Params=
 Button2_Admin=0
+Button2_Action=0
+Button2_AutoEnter=0
 Button3_Name=Paint
 Button3_Path=mspaint.exe
 Button3_Params=
 Button3_Admin=0
+Button3_Action=0
+Button3_AutoEnter=0
 Button4_Name=Calculator
 Button4_Path=calc.exe
 Button4_Params=
 Button4_Admin=0
+Button4_Action=0
+Button4_AutoEnter=0
 Button5_Name=Chrome
 Button5_Path=C:\Program Files\Google\Chrome\Application\chrome.exe
 Button5_Params=
 Button5_Admin=0
+Button5_Action=0
+Button5_AutoEnter=0
 Button6_Name=
 Button6_Path=
 Button6_Params=
 Button6_Admin=0
+Button6_Action=0
+Button6_AutoEnter=0
 Button7_Name=
 Button7_Path=
 Button7_Params=
 Button7_Admin=0
+Button7_Action=0
+Button7_AutoEnter=0
 Button8_Name=Task Manager
 Button8_Path=Taskmgr.exe
 Button8_Params=
 Button8_Admin=0
+Button8_Action=0
+Button8_AutoEnter=0
 Button9_Name=Command Prompt
 Button9_Path=cmd.exe
 Button9_Params=
 Button9_Admin=0
+Button9_Action=0
+Button9_AutoEnter=0
 Button10_Name=Remote Desktop
 Button10_Path=mstsc.exe
 Button10_Params=
 Button10_Admin=0
+Button10_Action=0
+Button10_AutoEnter=0
 Button11_Name=Sandbox
 Button11_Path=WindowsSandbox.exe
 Button11_Params=
 Button11_Admin=0
+Button11_Action=0
+Button11_AutoEnter=0
 Button12_Name=
 Button12_Path=
 Button12_Params=
 Button12_Admin=0
+Button12_Action=0
+Button12_AutoEnter=0
 Button13_Name=Desktop
 Button13_Path=explorer.exe
 Button13_Params=%USERPROFILE%\Desktop
 Button13_Admin=0
+Button13_Action=0
+Button13_AutoEnter=0
 Button14_Name=Downloads
 Button14_Path=explorer.exe
 Button14_Params=%USERPROFILE%\Downloads
 Button14_Admin=0
+Button14_Action=0
+Button14_AutoEnter=0
 Button15_Name=
 Button15_Path=
 Button15_Params=
 Button15_Admin=0
+Button15_Action=0
+Button15_AutoEnter=0
 
 [Tab1]
 Button0_Name=Device Manager
 Button0_Path=devmgmt.msc
 Button0_Params=
 Button0_Admin=0
+Button0_Action=0
+Button0_AutoEnter=0
 Button1_Name=Control Panel
 Button1_Path=control.exe
 Button1_Params=
 Button1_Admin=0
+Button1_Action=0
+Button1_AutoEnter=0
 Button2_Name=Disk Management
 Button2_Path=diskmgmt.msc
 Button2_Params=
 Button2_Admin=0
+Button2_Action=0
+Button2_AutoEnter=0
 Button3_Name=Computer Mgmt
 Button3_Path=compmgmt.msc
 Button3_Params=
 Button3_Admin=0
+Button3_Action=0
+Button3_AutoEnter=0
 Button4_Name=Programs
 Button4_Path=appwiz.cpl
 Button4_Params=
 Button4_Admin=0
+Button4_Action=0
+Button4_AutoEnter=0
 Button5_Name=System Info
 Button5_Path=msinfo32.exe
 Button5_Params=
 Button5_Admin=0
+Button5_Action=0
+Button5_AutoEnter=0
 
 [Tab2]
 Button0_Name=VS Code
 Button0_Path=code.exe
 Button0_Params=
 Button0_Admin=0
+Button0_Action=0
+Button0_AutoEnter=0
 Button1_Name=VS 2022
 Button1_Path=devenv.exe
 Button1_Params=
 Button1_Admin=0
+Button1_Action=0
+Button1_AutoEnter=0
 Button2_Name=VS Installer
 Button2_Path=C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe
 Button2_Params=
 Button2_Admin=0
+Button2_Action=0
+Button2_AutoEnter=0
+
+[Tab3]
+Button0_Name=update_upgrade
+Button0_Path=
+Button0_Params=sudo apt update && sudo apt upgrade
+Button0_Admin=0
+Button0_Action=1
+Button0_AutoEnter=0
+Button1_Name=poweroff
+Button1_Path=
+Button1_Params=sudo poweroff
+Button1_Admin=0
+Button1_Action=1
+Button1_AutoEnter=0
+Button2_Name=reboot
+Button2_Path=
+Button2_Params=sudo reboot
+Button2_Admin=0
+Button2_Action=1
+Button2_AutoEnter=0
+Button8_Name=Show IP
+Button8_Path=
+Button8_Params=ip addr show
+Button8_Admin=0
+Button8_Action=1
+Button8_AutoEnter=0
+
 )";
 }

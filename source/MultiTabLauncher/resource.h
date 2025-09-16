@@ -8,12 +8,22 @@
 #define IDC_EDIT_PARAMS                 1003
 #define IDC_CHECK_ADMIN                 1004
 #define IDC_BUTTON_BROWSE               1005
+#define IDC_BUTTON_URL                  1006
+#define IDC_STATIC_ACTION               1007
+#define IDC_RADIO_LAUNCH                1008
+#define IDC_RADIO_SENDKEYS              1009
+#define IDC_LBL_PATH                    1010
+#define IDC_LBL_PARAMS                  1011
+#define IDC_LBL_COMMAND                 1012
+#define IDC_EDIT_COMMAND                1013
+#define IDC_CHECK_AUTOENTER             1014
+
 #define IDD_TABMANAGER                  1100
 #define IDC_COMBO_TABCOUNT              1201
 #define IDC_TABNAME_BASE                1300
 #define IDC_SCROLLBAR                   1400
 #define IDC_STATIC_LABEL                1500
-#define IDC_BUTTON_URL                  5001
+
 
 // Next default values for new objects
 // 
