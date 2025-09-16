@@ -8,17 +8,29 @@ A lightweight application launcher that organizes programs into customizable tab
 ## Features
 
 - **One-click program execution** - Launch applications instantly with a single button click
+- **Terminal command injection** - Use the SendText function to inject commands into terminal applications
 - **Customizable button configuration** - Set program path, display name, and administrator privileges for each button
 - **Flexible tab management** - Adjust the number of tabs to organize your applications
 - **Configurable grid layout** - Control the number of rows and columns of buttons per tab
 - **Ultra-lightweight** - Application size is less than 300KB (statically linked)
+
+## Getting Started
+
+1. Download and extract the application
+2. Run `MultiTabLauncher.exe`
+3. Right-click on buttons to configure your applications
+4. Customize tabs and layout by editing the INI file as needed
+
+Perfect for users who want a clean, efficient way to organize and launch their frequently used applications without the overhead of complex launcher software.
 
 ## Configuration
 
 ### Quick Setup
 Right-click on any button to configure its settings through the context menu.
 
-![mtledit](https://github.com/user-attachments/assets/306169fe-7ee2-45be-aa3c-fa438107eb2a)
+![mtledit](https://github.com/user-attachments/assets/e0b16858-8e81-415b-9765-c1e6bf05f9cc)
+
+![mtledit](https://github.com/user-attachments/assets/e701dd39-9fb0-4bf5-a50c-4f5a95b75675)
 
 
 ### Advanced Configuration
@@ -54,12 +66,3 @@ If `MultiTabLauncher.ini` doesn't exist when launching the program, it will be a
 - **C++ Standard**: ISO C++20 (/std:c++20)
 - **C Standard**: ISO C17
 - **Windows SDK**: 10.0.26100.0
-
-## Getting Started
-
-1. Download and extract the application
-2. Run `MultiTabLauncher.exe`
-3. Right-click on buttons to configure your applications
-4. Customize tabs and layout by editing the INI file as needed
-
-Perfect for users who want a clean, efficient way to organize and launch their frequently used applications without the overhead of complex launcher software.
