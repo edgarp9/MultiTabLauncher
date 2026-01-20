@@ -115,8 +115,17 @@ inline void ltrim(std::wstring& s);
 //                   WinMain - Entry Point
 // =============================================================
 
+// =============================================================
+//                   WinMain - Entry Point
+// =============================================================
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
 {
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(hr))
+    {
+    }
+
     // Initialize common controls (for the tab control)
     INITCOMMONCONTROLSEX icc = { sizeof(INITCOMMONCONTROLSEX), ICC_TAB_CLASSES };
     InitCommonControlsEx(&icc);
@@ -129,6 +138,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
         if (modulePathLength == 0)
         {
             MessageBox(NULL, L"Failed to get the executable path.", L"Error", MB_OK | MB_ICONERROR);
+            CoUninitialize(); 
             return 1;
         }
         if (modulePathLength < modulePath.length())
@@ -162,12 +172,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
     if (!RegisterClassEx(&wc))
     {
         MessageBox(NULL, L"Window Registration Failed!", L"Error", MB_OK | MB_ICONERROR);
+        CoUninitialize();
         return 1;
     }
 
     // Create the main window
     g_hMainWindow = CreateWindowEx(
-        WS_EX_CLIENTEDGE, g_windowClassName, L"MultiTab Launcher",
+        WS_EX_CLIENTEDGE, g_windowClassName, L"MultiTab Launcher v3.1",
         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800,
         600, NULL, NULL, hInstance, NULL
     );
@@ -175,6 +186,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
     if (g_hMainWindow == NULL)
     {
         MessageBox(NULL, L"Window Creation Failed!", L"Error", MB_OK | MB_ICONERROR);
+        CoUninitialize();
         return 1;
     }
 
@@ -188,6 +200,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow)
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    CoUninitialize();
 
     return (int)msg.wParam;
 }
@@ -210,6 +224,15 @@ LRESULT CALLBACK MainWindowProcedure(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             ShowWindow(g_tabButtonData[0][i].hButton, SW_SHOW);
         }
         break;
+    }
+
+    case WM_ACTIVATE:
+    {
+        if (LOWORD(wParam) != WA_INACTIVE)
+        {
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        return 0;
     }
 
     case WM_SIZE:
